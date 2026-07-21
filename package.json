@@ -1,9 +1,8 @@
 {
   "name": "render-ai-sketchup-backend",
   "version": "1.0.0",
-  "description": "Backend Render AI cho plugin SketchUp - Supabase + SePay webhook tu dong cong Luot",
+  "description": "Backend Render AI cho plugin SketchUp - Supabase + PayOS",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node server.js"
   },
@@ -17,3 +16,4 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2"
   }
+}

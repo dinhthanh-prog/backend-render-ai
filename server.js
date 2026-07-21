@@ -81,7 +81,7 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 5. WEBHOOK SEPAY THÔNG MINH (BẮT ĐÚNG TỪ KHÓA NGUYÊN NGUYÊN VẸN)
+// 5. WEBHOOK SEPAY THÔNG MINH (BẮT ĐÚNG TỪ KHÓA, HỖ TRỢ CẢ EMAIL THÔ LẪN ID SỐ)
 app.post('/api/webhook/sepay-render', async (req, res) => {
     try {
         const { content, transferAmount, amount: rawAmount } = req.body;
@@ -91,13 +91,18 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
             return res.status(200).json({ success: true, message: "Nội dung trống" });
         }
 
-        // Bắt chính xác từ khóa NAPRENDER, NAPTOKEN hoặc AI đứng làm tiền tố độc lập
-        const match = content.match(/\b(NAPRENDER|NAPTOKEN|AI)\s*([a-zA-Z0-9]+)/i);
+        // 🎯 SỬA: cho phép bắt cả email thô (chứa @ và .), không chỉ chữ+số thuần.
+        // Trước đây regex chỉ nhận [a-zA-Z0-9]+ nên cú pháp "AI dinhthanh@dt3dmodel.org"
+        // bị cắt cụt tại dấu "@", chỉ bắt được "dinhthanh" và không khớp được với ai cả.
+        const match = content.match(/\b(NAPRENDER|NAPTOKEN|AI)\s*([a-zA-Z0-9@._+-]+)/i);
         if (!match) {
             return res.status(200).json({ success: true, message: "Cú pháp không chứa tiền tố hợp lệ" });
         }
 
-        const refCode = match[2].trim().toLowerCase(); // Lấy mã ID hoặc Email sạch đằng sau
+        // Lọc bỏ mọi ký tự đặc biệt (@, ., _, -, +) SAU KHI bắt được, để so khớp thống nhất
+        // dù cú pháp là email thô ("dinhthanh@dt3dmodel.org") hay email đã làm sạch ("dinhthanhdt3dmodelorg") hay ID số ("11").
+        const refCode = match[2].trim().toLowerCase().replace(/[^a-zA-Z0-9]/g, "");
+
         const amount = parseFloat(transferAmount || rawAmount || 0);
         const creditsToAdd = calculateCredits(amount);
 

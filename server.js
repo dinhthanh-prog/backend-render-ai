@@ -80,11 +80,11 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 💳 5. API TẠO MÃ QR PAYOS ĐỘNG
+// 💳 5. API TẠO MÃ QR PAYOS ĐỘNG (TỰ ĐỘNG TẠO LINK ẢNH VIETQR PNG CHUẨN)
 app.post('/api/payos/create-payment-link', async (req, res) => {
     try {
         if (!payos) {
-            return res.status(500).json({ success: false, error: "Chưa cấu hình đủ 3 Mã Key PayOS trên Render Environment!" });
+            return res.status(500).json({ success: false, error: "Chưa cấu hình đủ Mã Key PayOS trên Render!" });
         }
 
         const { userId, email, price } = req.body;
@@ -115,11 +115,15 @@ app.post('/api/payos/create-payment-link', async (req, res) => {
             returnUrl: "https://dt3dmodel.com"
         };
 
-        const paymentLinkRes = await payos.createPaymentLink(body);
+        // Khởi tạo link thanh toán trên PayOS
+        await payos.createPaymentLink(body);
         
+        // 🎯 TẠO LINK ẢNH VIETQR CHUẨN PNG CÓ LOGO BIDV KHÔNG LO BỊ BỂ ẢNH
+        const qrImageUrl = `https://img.vietqr.io/image/bidv-6910211757-compact.png?amount=${price}&addInfo=${encodeURIComponent(description)}`;
+
         return res.json({
             success: true,
-            qrCode: paymentLinkRes.qrCode,
+            qrCode: qrImageUrl, // Trả về link ảnh PNG trực tiếp cho thẻ <img>
             orderCode: orderCode,
             description: description
         });

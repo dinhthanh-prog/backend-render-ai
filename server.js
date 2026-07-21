@@ -10,26 +10,23 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// 1. CẤU HÌNH SUPABASE & PAYOS (BỌC CHỐNG CRASH)
+// 1. CẤU HÌNH SUPABASE & PAYOS (TỰ ĐỘNG LÀM SẠCH MÃ KEY)
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_KEY || "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let payos = null;
 try {
-    payos = new PayOS(
-        process.env.PAYOS_CLIENT_ID || "",
-        process.env.PAYOS_API_KEY || "",
-        process.env.PAYOS_CHECKSUM_KEY || ""
-    );
+    const clientId = (process.env.PAYOS_CLIENT_ID || "").trim();
+    const apiKey = (process.env.PAYOS_API_KEY || "").trim();
+    const checksumKey = (process.env.PAYOS_CHECKSUM_KEY || "").trim();
+
+    console.log("🔑 [PAYOS INIT] Client ID length:", clientId.length);
+
+    payos = new PayOS(clientId, apiKey, checksumKey);
 } catch (err) {
     console.error("⚠️ Cảnh báo khởi tạo PayOS:", err.message);
 }
-
-app.get('/', (req, res) => {
-    res.send('✅ Server Render AI (PayOS + Supabase) đang chạy mượt mà!');
-});
-
 // 2. QUY ĐỔI TIỀN SANG LƯỢT RENDER
 function calculateCredits(amount) {
     if (amount >= 500000) return 625;

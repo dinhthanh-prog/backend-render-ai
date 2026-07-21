@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
+const PayOS = require('@payos/node');
 
 const app = express();
 app.use(cors());
@@ -9,16 +10,20 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// 1. CẤU HÌNH SUPABASE
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// 1. KHỞI TẠO PAYOS & SUPABASE
+const payos = new PayOS(
+    process.env.PAYOS_CLIENT_ID,
+    process.env.PAYOS_API_KEY,
+    process.env.PAYOS_CHECKSUM_KEY
+);
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 app.get('/', (req, res) => {
-    res.send('✅ Server Render AI (Supabase + SePay) đang chạy!');
+    res.send('✅ Server Render AI (PayOS + Supabase) đang chạy!');
 });
 
-// 2. QUY ĐỔI TIỀN SANG LƯỢT RENDER
+// 2. TÍNH SỐ LƯỢT RENDER
 function calculateCredits(amount) {
     if (amount >= 500000) return 625;
     if (amount >= 200000) return 235;
@@ -27,46 +32,36 @@ function calculateCredits(amount) {
     return Math.floor(amount / 1000);
 }
 
-// 3. API ĐĂNG NHẬP GOOGLE (CÓ TRẢ VỀ ID ĐỂ GHÉP MÃ QR)
+// 3. API AUTH GOOGLE
 app.post('/api/render/auth/google', async (req, res) => {
     try {
         const { email } = req.body;
-        console.log(`📩 [Auth Render] Yêu cầu đăng nhập: ${email}`);
         if (!email) return res.status(400).json({ error: "Thiếu Email" });
 
-        const { data: userWallet, error: selectErr } = await supabase
+        const { data: userWallet } = await supabase
             .from('users_tokens_render')
             .select('*')
             .eq('email', email)
             .maybeSingle();
 
-        if (selectErr) console.error("❌ Lỗi Supabase Select:", selectErr.message);
-
         if (userWallet) {
-            console.log(`✅ User cũ: ${email} - ID: ${userWallet.id} - Số dư: ${userWallet.credits} Lượt`);
             return res.json({ id: userWallet.id, email: userWallet.email, credits: userWallet.credits });
         } else {
-            console.log(`✨ Tạo user mới: ${email} - Khởi tạo 0 Lượt`);
             const { data: newUser, error: insertErr } = await supabase
                 .from('users_tokens_render')
                 .insert([{ email: email, credits: 0 }])
                 .select()
                 .single();
 
-            if (insertErr) {
-                console.error("❌ Lỗi Insert Supabase:", insertErr.message);
-                return res.status(500).json({ error: insertErr.message });
-            }
-
+            if (insertErr) return res.status(500).json({ error: insertErr.message });
             return res.json({ id: newUser.id, email: newUser.email, credits: 0 });
         }
     } catch (err) {
-        console.error("❌ Lỗi Auth:", err.message);
         return res.status(500).json({ error: err.message });
     }
 });
 
-// 4. API KIỂM TRA SỐ DƯ RENDER
+// 4. API CHECK SỐ DƯ
 app.get('/api/render/user/balance', async (req, res) => {
     try {
         const email = req.query.email;
@@ -81,80 +76,80 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 5. WEBHOOK SEPAY THÔNG MINH (BÓC TÁCH CHÍNH XÁC ID + EMAIL)
-app.post('/api/webhook/sepay-render', async (req, res) => {
+// 💳 5. API TẠO LINK & MÃ QR THANH TOÁN PAYOS
+app.post('/api/payos/create-payment-link', async (req, res) => {
     try {
-        const { content, transferAmount, amount: rawAmount } = req.body;
-        console.log("👉 [SEPAY WEBHOOK RECEIVED]:", req.body);
+        const { userId, email, price } = req.body;
+        const orderCode = Number(String(Date.now()).slice(-9)); // Tạo mã đơn hàng duy nhất
+        const cleanEmail = email ? email.replace(/[^a-zA-Z0-9]/g, "") : "";
+        const description = userId ? `AI ${userId}` : `AI ${cleanEmail}`;
 
-        if (!content) {
-            return res.status(200).json({ success: true, message: "Nội dung trống" });
-        }
+        const body = {
+            orderCode: orderCode,
+            amount: price,
+            description: description.slice(0, 25), // PayOS giới hạn 25 ký tự
+            cancelUrl: "https://dt3dmodel.com",
+            returnUrl: "https://dt3dmodel.com"
+        };
 
-        // Bắt các từ khóa tiền tố: AI, NAPRENDER, NAPTOKEN
-        const match = content.match(/\b(AI|NAPRENDER|NAPTOKEN)\s+([a-zA-Z0-9\s]+)/i);
-        if (!match) {
-            return res.status(200).json({ success: true, message: "Không chứa cú pháp hợp lệ" });
-        }
-
-        // Tách các từ đằng sau tiền tố
-        const payloadText = match[2].trim();
-        const parts = payloadText.split(/\s+/);
-        
-        const maybeId = parts[0]; 
-        const maybeEmail = parts[1] || parts[0];
-
-        const amount = parseFloat(transferAmount || rawAmount || 0);
-        const creditsToAdd = calculateCredits(amount);
-
-        const { data: users, error: fetchErr } = await supabase
-            .from('users_tokens_render')
-            .select('*');
-
-        if (fetchErr || !users) {
-            console.error("Lỗi lấy danh sách user Supabase:", fetchErr);
-            return res.status(500).json({ error: "Lỗi kết nối CSDL" });
-        }
-
-        // Ưu tiên khớp ID trước, nếu không thì khớp Email
-        const targetUser = users.find(u => {
-            if (!u) return false;
-            const isIdMatch = u.id && u.id.toString() === maybeId;
-            const userCleanEmail = u.email ? u.email.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
-            const isEmailMatch = userCleanEmail && (userCleanEmail === maybeEmail.toLowerCase() || userCleanEmail === maybeId.toLowerCase());
-            return isIdMatch || isEmailMatch;
+        const paymentLinkRes = await payos.createPaymentLink(body);
+        return res.json({
+            success: true,
+            qrCode: paymentLinkRes.qrCode,
+            orderCode: orderCode,
+            description: body.description
         });
-
-        if (!targetUser) {
-            console.log(`❌ Không tìm thấy user với thông tin: ID=${maybeId}, Email=${maybeEmail}`);
-            return res.status(200).json({ success: false, message: "Không tìm thấy User" });
-        }
-
-        const currentCredits = parseFloat(targetUser.credits) || 0;
-        const newCredits = currentCredits + creditsToAdd;
-
-        const { error: updateErr } = await supabase
-            .from('users_tokens_render')
-            .update({ credits: newCredits })
-            .eq('id', targetUser.id);
-
-        if (updateErr) {
-            console.error("Lỗi cập nhật số dư:", updateErr);
-            return res.status(500).json({ error: "Lỗi cập nhật số dư" });
-        }
-
-        console.log(`🎉 [SEPAY SUCCESS] Đã cộng ${creditsToAdd} Lượt cho User ID ${targetUser.id} (${targetUser.email}). Số dư mới: ${newCredits}`);
-        return res.status(200).json({ success: true, message: "Cộng lượt thành công" });
-
-    } catch (err) {
-        console.error("Lỗi xử lý Webhook SePay:", err);
-        return res.status(500).json({ error: err.message });
+    } catch (error) {
+        console.error("❌ Lỗi PayOS Create Link:", error);
+        return res.status(500).json({ error: error.message });
     }
 });
 
-// 6. KHỞI ĐỘNG SERVER
+// 🔔 6. WEBHOOK PAYOS TỰ ĐỘNG CỘNG LƯỢT
+app.post('/api/webhook/payos', async (req, res) => {
+    try {
+        const webhookData = payos.verifyPaymentWebhookData(req.body);
+        console.log("👉 [PAYOS WEBHOOK RECEIVED]:", webhookData);
+
+        if (webhookData.code === "00") { // Thanh toán thành công
+            const amount = webhookData.amount;
+            const description = webhookData.description || "";
+            const creditsToAdd = calculateCredits(amount);
+
+            // Bắt mã ID từ mô tả "AI 11"
+            const match = description.match(/\bAI\s+([a-zA-Z0-9]+)/i);
+            const refCode = match ? match[1].toLowerCase() : "";
+
+            const { data: users } = await supabase.from('users_tokens_render').select('*');
+
+            if (users) {
+                const targetUser = users.find(u => {
+                    if (!u) return false;
+                    const isIdMatch = u.id && u.id.toString() === refCode;
+                    const userCleanEmail = u.email ? u.email.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
+                    return isIdMatch || userCleanEmail === refCode;
+                });
+
+                if (targetUser) {
+                    const newCredits = (parseFloat(targetUser.credits) || 0) + creditsToAdd;
+                    await supabase
+                        .from('users_tokens_render')
+                        .update({ credits: newCredits })
+                        .eq('id', targetUser.id);
+
+                    console.log(`🎉 [PAYOS SUCCESS] Đã cộng ${creditsToAdd} Lượt cho User ID ${targetUser.id} (${targetUser.email}). Số dư mới: ${newCredits}`);
+                }
+            }
+        }
+        return res.json({ success: true });
+    } catch (err) {
+        console.error("❌ Lỗi Webhook PayOS:", err.message);
+        return res.json({ success: false });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`=============================================`);
-    console.log(`✅ [SERVER RENDER AI] Đang chạy tại cổng ${PORT}`);
+    console.log(`✅ [SERVER RENDER AI - PAYOS] Đang chạy tại cổng ${PORT}`);
     console.log(`=============================================`);
 });

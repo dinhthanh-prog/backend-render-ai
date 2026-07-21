@@ -85,30 +85,28 @@ app.get('/api/render/user/balance', async (req, res) => {
 });
 
 // =========================================================
-// 💳 WEBHOOK SEPAY TỰ ĐỘNG CỘNG LƯỢT (THÔNG MINH: LỌC ID + EMAIL)
+// 💳 WEBHOOK SEPAY TỰ ĐỘNG CỘNG LƯỢT (CÚ PHÁP MỚI: AI + EMAIL)
 // =========================================================
 app.post('/api/webhook/sepay-render', async (req, res) => {
     try {
-        const { content, transferAmount } = req.body;
+        const { content, transferAmount, amount: rawAmount } = req.body;
         console.log("👉 [SEPAY WEBHOOK RECEIVED]:", req.body);
 
-        if (!content || !content.toUpperCase().includes('NAPRENDER')) {
-            return res.status(200).json({ success: true, message: "Giao dịch không thuộc Render AI" });
+        // 🎯 LỌC CÚ PHÁP CÓ CHỨA TỪ KHÓA "AI"
+        if (!content || !content.toUpperCase().includes('AI')) {
+            return res.status(200).json({ success: true, message: "Giao dịch không có từ khóa AI" });
         }
 
-        // Tách lấy phần mã đằng sau chữ NAPRENDER (Có thể là số ID hoặc Email)
-        const match = content.match(/NAPRENDER\s*([a-zA-Z0-9]+)/i);
+        // Tách lấy mã đằng sau từ khóa AI (Ví dụ: "AI vanthanh030291gmailcom")
+        const match = content.match(/AI\s*([a-zA-Z0-9]+)/i);
         if (!match) {
             return res.status(200).json({ success: true, message: "Cú pháp chuyển khoản không hợp lệ" });
         }
 
-        const refCode = match[1].trim().toLowerCase(); // Ví dụ: "4" hoặc "dinhthanhdt3dmodelorg"
-
-        // 1. Tính số lượt được cộng
-        const amount = parseFloat(transferAmount);
+        const refCode = match[1].trim().toLowerCase();
+        const amount = parseFloat(transferAmount || rawAmount || 0);
         const creditsToAdd = calculateCredits(amount);
 
-        // 2. Lấy danh sách user từ Supabase
         const { data: users, error: fetchErr } = await supabase
             .from('users_tokens_render')
             .select('*');
@@ -118,8 +116,9 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
             return res.status(500).json({ error: "Lỗi kết nối CSDL" });
         }
 
-        // 3. Tìm user khớp theo ID (Ví dụ: 4) HOẶC theo Email
+        // Tìm user khớp theo ID hoặc Clean Email
         const targetUser = users.find(u => {
+            if (!u || !u.email) return false;
             const isIdMatch = u.id.toString() === refCode;
             const userCleanEmail = u.email.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
             const isEmailMatch = userCleanEmail === refCode;
@@ -131,7 +130,6 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
             return res.status(200).json({ success: false, message: "Không tìm thấy User" });
         }
 
-        // 4. Cộng lượt vào tài khoản
         const currentCredits = parseFloat(targetUser.credits) || 0;
         const newCredits = currentCredits + creditsToAdd;
 
@@ -152,11 +150,4 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
         console.error("Lỗi xử lý Webhook SePay:", err);
         return res.status(500).json({ error: err.message });
     }
-});
-
-// 🎯 QUAN TRỌNG: thiếu dòng này ở bản trước là nguyên nhân gây "Port scan timeout reached, no open ports detected"
-app.listen(PORT, () => {
-    console.log(`=============================================`);
-    console.log(`✅ [SERVER RENDER AI] Đang chạy tại cổng ${PORT}`);
-    console.log(`=============================================`);
 });

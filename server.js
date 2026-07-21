@@ -14,7 +14,6 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Route kiểm tra nhanh server
 app.get('/', (req, res) => {
     res.send('✅ Server Render AI (Supabase + SePay) đang chạy!');
 });
@@ -82,22 +81,23 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 5. WEBHOOK SEPAY TỰ ĐỘNG CỘNG LƯỢT (CÚ PHÁP MỚI: AI + EMAIL HOẶC ID)
+// 5. WEBHOOK SEPAY THÔNG MINH (BẮT ĐÚNG TỪ KHÓA NGUYÊN NGUYÊN VẸN)
 app.post('/api/webhook/sepay-render', async (req, res) => {
     try {
         const { content, transferAmount, amount: rawAmount } = req.body;
         console.log("👉 [SEPAY WEBHOOK RECEIVED]:", req.body);
 
-        if (!content || !content.toUpperCase().includes('AI')) {
-            return res.status(200).json({ success: true, message: "Giao dịch không có từ khóa AI" });
+        if (!content) {
+            return res.status(200).json({ success: true, message: "Nội dung trống" });
         }
 
-        const match = content.match(/AI\s*([a-zA-Z0-9]+)/i);
+        // Bắt chính xác từ khóa NAPRENDER, NAPTOKEN hoặc AI đứng làm tiền tố độc lập
+        const match = content.match(/\b(NAPRENDER|NAPTOKEN|AI)\s*([a-zA-Z0-9]+)/i);
         if (!match) {
-            return res.status(200).json({ success: true, message: "Cú pháp chuyển khoản không hợp lệ" });
+            return res.status(200).json({ success: true, message: "Cú pháp không chứa tiền tố hợp lệ" });
         }
 
-        const refCode = match[1].trim().toLowerCase();
+        const refCode = match[2].trim().toLowerCase(); // Lấy mã ID hoặc Email sạch đằng sau
         const amount = parseFloat(transferAmount || rawAmount || 0);
         const creditsToAdd = calculateCredits(amount);
 
@@ -111,10 +111,10 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
         }
 
         const targetUser = users.find(u => {
-            if (!u || !u.email) return false;
+            if (!u) return false;
             const isIdMatch = u.id && u.id.toString() === refCode;
-            const userCleanEmail = u.email.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-            const isEmailMatch = userCleanEmail === refCode;
+            const userCleanEmail = u.email ? u.email.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
+            const isEmailMatch = userCleanEmail && userCleanEmail === refCode;
             return isIdMatch || isEmailMatch;
         });
 
@@ -145,7 +145,6 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
     }
 });
 
-// 6. LẮNG NGHE CỔNG SERVER (BẮT BỘC LÀM SERVER SỐNG)
 app.listen(PORT, () => {
     console.log(`=============================================`);
     console.log(`✅ [SERVER RENDER AI] Đang chạy tại cổng ${PORT}`);

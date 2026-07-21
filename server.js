@@ -80,7 +80,7 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 💳 5. API TẠO MÃ QR PAYOS ĐỘNG (TỰ ĐỘNG TẠO LINK ẢNH VIETQR PNG CHUẨN)
+// 💳 5. API TẠO MÃ QR PAYOS ĐỘNG (CHUẨN TRACKING CỦA PAYOS)
 app.post('/api/payos/create-payment-link', async (req, res) => {
     try {
         if (!payos) {
@@ -88,23 +88,13 @@ app.post('/api/payos/create-payment-link', async (req, res) => {
         }
 
         const { userId, email, price } = req.body;
-        console.log("📥 [PAYOS CREATE LINK REQ]:", { userId, email, price });
-
+        
         if (!price || isNaN(price)) {
             return res.status(400).json({ success: false, error: "Số tiền không hợp lệ!" });
         }
 
         const orderCode = Math.floor(100000 + Math.random() * 900000) + Number(String(Date.now()).slice(-5));
-
-        let cleanRef = "";
-        if (userId) {
-            cleanRef = String(userId);
-        } else if (email && email !== "") {
-            cleanRef = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, "");
-        } else {
-            cleanRef = "KHACH";
-        }
-
+        let cleanRef = userId ? String(userId) : (email ? email.split('@')[0].replace(/[^a-zA-Z0-9]/g, "") : "KHACH");
         const description = `AI ${cleanRef}`.slice(0, 25);
 
         const body = {
@@ -116,24 +106,21 @@ app.post('/api/payos/create-payment-link', async (req, res) => {
         };
 
         // Khởi tạo link thanh toán trên PayOS
-        await payos.createPaymentLink(body);
+        const paymentLinkRes = await payos.createPaymentLink(body);
         
-        // 🎯 TẠO LINK ẢNH VIETQR CHUẨN PNG CÓ LOGO BIDV KHÔNG LO BỊ BỂ ẢNH
-        const qrImageUrl = `https://img.vietqr.io/image/bidv-6910211757-compact.png?amount=${price}&addInfo=${encodeURIComponent(description)}`;
+        // 🎯 DÙNG CHUỖI MÃ HOÁ GỐC CỦA PAYOS (CHỨA MÃ TRACKING) ĐỂ TẠO ẢNH QR
+        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(paymentLinkRes.qrCode)}`;
 
         return res.json({
             success: true,
-            qrCode: qrImageUrl, // Trả về link ảnh PNG trực tiếp cho thẻ <img>
+            qrCode: qrImageUrl, // Ảnh QR giờ đã chứa đầy đủ dữ liệu nhận diện của PayOS
             orderCode: orderCode,
             description: description
         });
 
     } catch (error) {
         console.error("❌ Lỗi PayOS Create Link:", error);
-        return res.status(500).json({ 
-            success: false, 
-            error: error.message || "Lỗi khởi tạo thanh toán PayOS" 
-        });
+        return res.status(500).json({ success: false, error: error.message });
     }
 });
 

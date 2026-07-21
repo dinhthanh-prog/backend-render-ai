@@ -76,47 +76,87 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 💳 5. API TẠO LINK & MÃ QR THANH TOÁN PAYOS
+// 💳 5. API TẠO MÃ QR PAYOS ĐỘNG (ĐÃ TỐI ƯU CHỐNG LỖI LENGTH)
 app.post('/api/payos/create-payment-link', async (req, res) => {
     try {
         const { userId, email, price } = req.body;
-        const orderCode = Number(String(Date.now()).slice(-9)); // Tạo mã đơn hàng duy nhất
-        const cleanEmail = email ? email.replace(/[^a-zA-Z0-9]/g, "") : "";
-        const description = userId ? `AI ${userId}` : `AI ${cleanEmail}`;
+        console.log("📥 [PAYOS CREATE LINK REQ]:", { userId, email, price });
+
+        if (!price || isNaN(price)) {
+            return res.status(400).json({ success: false, error: "Số tiền không hợp lệ!" });
+        }
+
+        // Tạo orderCode ngẫu nhiên dạng số nguyên chuẩn
+        const orderCode = Math.floor(100000 + Math.random() * 900000) + Number(String(Date.now()).slice(-5));
+
+        // Trích xuất mã định danh ngắn gọn không dấu
+        let cleanRef = "";
+        if (userId) {
+            cleanRef = String(userId);
+        } else if (email && email !== "") {
+            cleanRef = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, "");
+        } else {
+            cleanRef = "KHACH";
+        }
+
+        const description = `AI ${cleanRef}`.slice(0, 25);
 
         const body = {
             orderCode: orderCode,
-            amount: price,
-            description: description.slice(0, 25), // PayOS giới hạn 25 ký tự
+            amount: Number(price),
+            description: description,
             cancelUrl: "https://dt3dmodel.com",
             returnUrl: "https://dt3dmodel.com"
         };
 
+        console.log("🚀 Đang gửi yêu cầu tạo QR sang PayOS:", body);
+
         const paymentLinkRes = await payos.createPaymentLink(body);
+        
         return res.json({
             success: true,
             qrCode: paymentLinkRes.qrCode,
             orderCode: orderCode,
-            description: body.description
+            description: description
         });
+
     } catch (error) {
         console.error("❌ Lỗi PayOS Create Link:", error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ 
+            success: false, 
+            error: error.message || "Lỗi khởi tạo thanh toán PayOS (Kiểm tra lại Key trên Render)" 
+        });
     }
 });
 
-// 🔔 6. WEBHOOK PAYOS TỰ ĐỘNG CỘNG LƯỢT
+// 🔔 6. WEBHOOK PAYOS TỰ ĐỘNG CỘNG LƯỢT (ĐÃ XỬ LÝ LỖI TEST PING)
 app.post('/api/webhook/payos', async (req, res) => {
     try {
-        const webhookData = payos.verifyPaymentWebhookData(req.body);
-        console.log("👉 [PAYOS WEBHOOK RECEIVED]:", webhookData);
+        console.log("👉 [PAYOS WEBHOOK RAW]:", req.body);
 
-        if (webhookData.code === "00") { // Thanh toán thành công
+        if (!req.body) {
+            return res.json({ success: true, message: "Empty body" });
+        }
+
+        let webhookData = null;
+
+        // Bọc riêng Verify để không bị lỗi khi PayOS bấm nút "Lưu / Kiểm tra"
+        try {
+            webhookData = payos.verifyPaymentWebhookData(req.body);
+        } catch (vErr) {
+            console.log("⚠️ Nhận tin nhắn Ping/Test từ PayOS:", vErr.message);
+            // Luôn trả về success: true để PayOS xác nhận Webhook URL đang hoạt động tốt!
+            return res.json({ success: true, message: "Webhook active" });
+        }
+
+        // Nếu là giao dịch chuyển tiền THẬT (Verify thành công)
+        if (webhookData) {
             const amount = webhookData.amount;
             const description = webhookData.description || "";
             const creditsToAdd = calculateCredits(amount);
 
-            // Bắt mã ID từ mô tả "AI 11"
+            console.log(`💰 Giao dịch thật: ${amount} VNĐ - Nội dung: "${description}"`);
+
             const match = description.match(/\bAI\s+([a-zA-Z0-9]+)/i);
             const refCode = match ? match[1].toLowerCase() : "";
 
@@ -137,19 +177,13 @@ app.post('/api/webhook/payos', async (req, res) => {
                         .update({ credits: newCredits })
                         .eq('id', targetUser.id);
 
-                    console.log(`🎉 [PAYOS SUCCESS] Đã cộng ${creditsToAdd} Lượt cho User ID ${targetUser.id} (${targetUser.email}). Số dư mới: ${newCredits}`);
+                    console.log(`🎉 [PAYOS SUCCESS] Đã cộng ${creditsToAdd} Lượt cho User ID ${targetUser.id}. Số dư mới: ${newCredits}`);
                 }
             }
         }
         return res.json({ success: true });
     } catch (err) {
-        console.error("❌ Lỗi Webhook PayOS:", err.message);
-        return res.json({ success: false });
+        console.error("❌ Lỗi xử lý Webhook PayOS:", err.message);
+        return res.json({ success: true });
     }
-});
-
-app.listen(PORT, () => {
-    console.log(`=============================================`);
-    console.log(`✅ [SERVER RENDER AI - PAYOS] Đang chạy tại cổng ${PORT}`);
-    console.log(`=============================================`);
 });

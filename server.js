@@ -27,7 +27,7 @@ function calculateCredits(amount) {
     return Math.floor(amount / 1000);
 }
 
-// 3. API ĐĂNG NHẬP GOOGLE CHO AI RENDER
+// 3. API ĐĂNG NHẬP GOOGLE (CÓ TRẢ VỀ ID ĐỂ GHÉP MÃ QR)
 app.post('/api/render/auth/google', async (req, res) => {
     try {
         const { email } = req.body;
@@ -44,7 +44,6 @@ app.post('/api/render/auth/google', async (req, res) => {
 
         if (userWallet) {
             console.log(`✅ User cũ: ${email} - ID: ${userWallet.id} - Số dư: ${userWallet.credits} Lượt`);
-            // 🎯 TRẢ VỀ THÊM CỘT ID
             return res.json({ id: userWallet.id, email: userWallet.email, credits: userWallet.credits });
         } else {
             console.log(`✨ Tạo user mới: ${email} - Khởi tạo 0 Lượt`);
@@ -59,7 +58,6 @@ app.post('/api/render/auth/google', async (req, res) => {
                 return res.status(500).json({ error: insertErr.message });
             }
 
-            // 🎯 TRẢ VỀ THÊM CỘT ID DÀNH CHO USER MỚI
             return res.json({ id: newUser.id, email: newUser.email, credits: 0 });
         }
     } catch (err) {
@@ -83,9 +81,7 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// =========================================================
-// 💳 WEBHOOK SEPAY TỰ ĐỘNG BÓC TÁCH ID VÀ EMAIL (GIỐNG 2D TO 3D)
-// =========================================================
+// 5. WEBHOOK SEPAY THÔNG MINH (BÓC TÁCH CHÍNH XÁC ID + EMAIL)
 app.post('/api/webhook/sepay-render', async (req, res) => {
     try {
         const { content, transferAmount, amount: rawAmount } = req.body;
@@ -101,13 +97,12 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
             return res.status(200).json({ success: true, message: "Không chứa cú pháp hợp lệ" });
         }
 
-        // Tách các từ đằng sau tiền tố. Ví dụ từ "AI 11 dinhthanhdt3dmodelorg" 
-        // => parts sẽ là ["11", "dinhthanhdt3dmodelorg"]
+        // Tách các từ đằng sau tiền tố
         const payloadText = match[2].trim();
         const parts = payloadText.split(/\s+/);
         
-        const maybeId = parts[0]; // Số ID (Ví dụ: "11" hoặc "462")
-        const maybeEmail = parts[1] || parts[0]; // Email rút gọn
+        const maybeId = parts[0]; 
+        const maybeEmail = parts[1] || parts[0];
 
         const amount = parseFloat(transferAmount || rawAmount || 0);
         const creditsToAdd = calculateCredits(amount);
@@ -121,7 +116,7 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
             return res.status(500).json({ error: "Lỗi kết nối CSDL" });
         }
 
-        // ƯU TIÊN 1: Khớp theo Mã ID trước -> ƯU TIÊN 2: Khớp theo Email
+        // Ưu tiên khớp ID trước, nếu không thì khớp Email
         const targetUser = users.find(u => {
             if (!u) return false;
             const isIdMatch = u.id && u.id.toString() === maybeId;
@@ -155,4 +150,11 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
         console.error("Lỗi xử lý Webhook SePay:", err);
         return res.status(500).json({ error: err.message });
     }
+});
+
+// 6. KHỞI ĐỘNG SERVER
+app.listen(PORT, () => {
+    console.log(`=============================================`);
+    console.log(`✅ [SERVER RENDER AI] Đang chạy tại cổng ${PORT}`);
+    console.log(`=============================================`);
 });

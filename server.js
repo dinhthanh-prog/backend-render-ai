@@ -43,8 +43,9 @@ app.post('/api/render/auth/google', async (req, res) => {
         if (selectErr) console.error("❌ Lỗi Supabase Select:", selectErr.message);
 
         if (userWallet) {
-            console.log(`✅ User cũ: ${email} - Số dư: ${userWallet.credits} Lượt`);
-            return res.json({ email: userWallet.email, credits: userWallet.credits });
+            console.log(`✅ User cũ: ${email} - ID: ${userWallet.id} - Số dư: ${userWallet.credits} Lượt`);
+            // 🎯 TRẢ VỀ THÊM CỘT ID
+            return res.json({ id: userWallet.id, email: userWallet.email, credits: userWallet.credits });
         } else {
             console.log(`✨ Tạo user mới: ${email} - Khởi tạo 0 Lượt`);
             const { data: newUser, error: insertErr } = await supabase
@@ -58,7 +59,8 @@ app.post('/api/render/auth/google', async (req, res) => {
                 return res.status(500).json({ error: insertErr.message });
             }
 
-            return res.json({ email: newUser.email, credits: 0 });
+            // 🎯 TRẢ VỀ THÊM CỘT ID DÀNH CHO USER MỚI
+            return res.json({ id: newUser.id, email: newUser.email, credits: 0 });
         }
     } catch (err) {
         console.error("❌ Lỗi Auth:", err.message);

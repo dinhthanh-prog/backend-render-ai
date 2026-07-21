@@ -10,20 +10,27 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// 1. KHỞI TẠO PAYOS & SUPABASE
-const payos = new PayOS(
-    process.env.PAYOS_CLIENT_ID,
-    process.env.PAYOS_API_KEY,
-    process.env.PAYOS_CHECKSUM_KEY
-);
+// 1. CẤU HÌNH SUPABASE & PAYOS (BỌC CHỐNG CRASH)
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_KEY = process.env.SUPABASE_KEY || "";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+let payos = null;
+try {
+    payos = new PayOS(
+        process.env.PAYOS_CLIENT_ID || "",
+        process.env.PAYOS_API_KEY || "",
+        process.env.PAYOS_CHECKSUM_KEY || ""
+    );
+} catch (err) {
+    console.error("⚠️ Cảnh báo khởi tạo PayOS:", err.message);
+}
 
 app.get('/', (req, res) => {
-    res.send('✅ Server Render AI (PayOS + Supabase) đang chạy!');
+    res.send('✅ Server Render AI (PayOS + Supabase) đang chạy mượt mà!');
 });
 
-// 2. TÍNH SỐ LƯỢT RENDER
+// 2. QUY ĐỔI TIỀN SANG LƯỢT RENDER
 function calculateCredits(amount) {
     if (amount >= 500000) return 625;
     if (amount >= 200000) return 235;
@@ -61,7 +68,7 @@ app.post('/api/render/auth/google', async (req, res) => {
     }
 });
 
-// 4. API CHECK SỐ DƯ
+// 4. API KIỂM TRA SỐ DƯ
 app.get('/api/render/user/balance', async (req, res) => {
     try {
         const email = req.query.email;
@@ -76,9 +83,13 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 💳 5. API TẠO MÃ QR PAYOS ĐỘNG (ĐÃ TỐI ƯU CHỐNG LỖI LENGTH)
+// 💳 5. API TẠO MÃ QR PAYOS ĐỘNG
 app.post('/api/payos/create-payment-link', async (req, res) => {
     try {
+        if (!payos) {
+            return res.status(500).json({ success: false, error: "Chưa cấu hình đủ 3 Mã Key PayOS trên Render Environment!" });
+        }
+
         const { userId, email, price } = req.body;
         console.log("📥 [PAYOS CREATE LINK REQ]:", { userId, email, price });
 
@@ -86,10 +97,8 @@ app.post('/api/payos/create-payment-link', async (req, res) => {
             return res.status(400).json({ success: false, error: "Số tiền không hợp lệ!" });
         }
 
-        // Tạo orderCode ngẫu nhiên dạng số nguyên chuẩn
         const orderCode = Math.floor(100000 + Math.random() * 900000) + Number(String(Date.now()).slice(-5));
 
-        // Trích xuất mã định danh ngắn gọn không dấu
         let cleanRef = "";
         if (userId) {
             cleanRef = String(userId);
@@ -109,8 +118,6 @@ app.post('/api/payos/create-payment-link', async (req, res) => {
             returnUrl: "https://dt3dmodel.com"
         };
 
-        console.log("🚀 Đang gửi yêu cầu tạo QR sang PayOS:", body);
-
         const paymentLinkRes = await payos.createPaymentLink(body);
         
         return res.json({
@@ -124,12 +131,12 @@ app.post('/api/payos/create-payment-link', async (req, res) => {
         console.error("❌ Lỗi PayOS Create Link:", error);
         return res.status(500).json({ 
             success: false, 
-            error: error.message || "Lỗi khởi tạo thanh toán PayOS (Kiểm tra lại Key trên Render)" 
+            error: error.message || "Lỗi khởi tạo thanh toán PayOS" 
         });
     }
 });
 
-// 🔔 6. WEBHOOK PAYOS TỰ ĐỘNG CỘNG LƯỢT (ĐÃ XỬ LÝ LỖI TEST PING)
+// 🔔 6. WEBHOOK PAYOS TỰ ĐỘNG CỘNG LƯỢT
 app.post('/api/webhook/payos', async (req, res) => {
     try {
         console.log("👉 [PAYOS WEBHOOK RAW]:", req.body);
@@ -140,16 +147,15 @@ app.post('/api/webhook/payos', async (req, res) => {
 
         let webhookData = null;
 
-        // Bọc riêng Verify để không bị lỗi khi PayOS bấm nút "Lưu / Kiểm tra"
-        try {
-            webhookData = payos.verifyPaymentWebhookData(req.body);
-        } catch (vErr) {
-            console.log("⚠️ Nhận tin nhắn Ping/Test từ PayOS:", vErr.message);
-            // Luôn trả về success: true để PayOS xác nhận Webhook URL đang hoạt động tốt!
-            return res.json({ success: true, message: "Webhook active" });
+        if (payos) {
+            try {
+                webhookData = payos.verifyPaymentWebhookData(req.body);
+            } catch (vErr) {
+                console.log("⚠️ Nhận tin nhắn Ping/Test từ PayOS:", vErr.message);
+                return res.json({ success: true, message: "Webhook active" });
+            }
         }
 
-        // Nếu là giao dịch chuyển tiền THẬT (Verify thành công)
         if (webhookData) {
             const amount = webhookData.amount;
             const description = webhookData.description || "";
@@ -186,4 +192,10 @@ app.post('/api/webhook/payos', async (req, res) => {
         console.error("❌ Lỗi xử lý Webhook PayOS:", err.message);
         return res.json({ success: true });
     }
+});
+
+app.listen(PORT, () => {
+    console.log(`=============================================`);
+    console.log(`✅ [SERVER RENDER AI - PAYOS] Đang chạy tại cổng ${PORT}`);
+    console.log(`=============================================`);
 });

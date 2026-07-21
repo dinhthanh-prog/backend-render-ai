@@ -1,4 +1,3 @@
-// Fix Webhook SePay V2            
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -15,7 +14,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Route kiểm tra nhanh server có sống không (mở link này trên trình duyệt để xác nhận deploy thành công)
+// Route kiểm tra nhanh server
 app.get('/', (req, res) => {
     res.send('✅ Server Render AI (Supabase + SePay) đang chạy!');
 });
@@ -29,7 +28,7 @@ function calculateCredits(amount) {
     return Math.floor(amount / 1000);
 }
 
-// 3. API ĐĂNG NHẬP GOOGLE CHO AI RENDER (GÁN MẶC ĐỊNH 0 LƯỢT)
+// 3. API ĐĂNG NHẬP GOOGLE CHO AI RENDER
 app.post('/api/render/auth/google', async (req, res) => {
     try {
         const { email } = req.body;
@@ -48,7 +47,6 @@ app.post('/api/render/auth/google', async (req, res) => {
             console.log(`✅ User cũ: ${email} - Số dư: ${userWallet.credits} Lượt`);
             return res.json({ email: userWallet.email, credits: userWallet.credits });
         } else {
-            // 🎯 TẠO USER MỚI VỚI 0 LƯỢT MẶC ĐỊNH
             console.log(`✨ Tạo user mới: ${email} - Khởi tạo 0 Lượt`);
             const { data: newUser, error: insertErr } = await supabase
                 .from('users_tokens_render')
@@ -84,20 +82,16 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// =========================================================
-// 💳 WEBHOOK SEPAY TỰ ĐỘNG CỘNG LƯỢT (CÚ PHÁP MỚI: AI + EMAIL)
-// =========================================================
+// 5. WEBHOOK SEPAY TỰ ĐỘNG CỘNG LƯỢT (CÚ PHÁP MỚI: AI + EMAIL HOẶC ID)
 app.post('/api/webhook/sepay-render', async (req, res) => {
     try {
         const { content, transferAmount, amount: rawAmount } = req.body;
         console.log("👉 [SEPAY WEBHOOK RECEIVED]:", req.body);
 
-        // 🎯 LỌC CÚ PHÁP CÓ CHỨA TỪ KHÓA "AI"
         if (!content || !content.toUpperCase().includes('AI')) {
             return res.status(200).json({ success: true, message: "Giao dịch không có từ khóa AI" });
         }
 
-        // Tách lấy mã đằng sau từ khóa AI (Ví dụ: "AI vanthanh030291gmailcom")
         const match = content.match(/AI\s*([a-zA-Z0-9]+)/i);
         if (!match) {
             return res.status(200).json({ success: true, message: "Cú pháp chuyển khoản không hợp lệ" });
@@ -116,10 +110,9 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
             return res.status(500).json({ error: "Lỗi kết nối CSDL" });
         }
 
-        // Tìm user khớp theo ID hoặc Clean Email
         const targetUser = users.find(u => {
             if (!u || !u.email) return false;
-            const isIdMatch = u.id.toString() === refCode;
+            const isIdMatch = u.id && u.id.toString() === refCode;
             const userCleanEmail = u.email.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
             const isEmailMatch = userCleanEmail === refCode;
             return isIdMatch || isEmailMatch;
@@ -150,4 +143,11 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
         console.error("Lỗi xử lý Webhook SePay:", err);
         return res.status(500).json({ error: err.message });
     }
+});
+
+// 6. LẮNG NGHE CỔNG SERVER (BẮT BỘC LÀM SERVER SỐNG)
+app.listen(PORT, () => {
+    console.log(`=============================================`);
+    console.log(`✅ [SERVER RENDER AI] Đang chạy tại cổng ${PORT}`);
+    console.log(`=============================================`);
 });

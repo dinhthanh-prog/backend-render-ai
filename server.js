@@ -83,7 +83,9 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 5. WEBHOOK SEPAY THÔNG MINH (BẮT ĐÚNG TỪ KHÓA, HỖ TRỢ CẢ EMAIL THÔ LẪN ID SỐ)
+// =========================================================
+// 💳 WEBHOOK SEPAY TỰ ĐỘNG BÓC TÁCH ID VÀ EMAIL (GIỐNG 2D TO 3D)
+// =========================================================
 app.post('/api/webhook/sepay-render', async (req, res) => {
     try {
         const { content, transferAmount, amount: rawAmount } = req.body;
@@ -93,17 +95,19 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
             return res.status(200).json({ success: true, message: "Nội dung trống" });
         }
 
-        // 🎯 SỬA: cho phép bắt cả email thô (chứa @ và .), không chỉ chữ+số thuần.
-        // Trước đây regex chỉ nhận [a-zA-Z0-9]+ nên cú pháp "AI dinhthanh@dt3dmodel.org"
-        // bị cắt cụt tại dấu "@", chỉ bắt được "dinhthanh" và không khớp được với ai cả.
-        const match = content.match(/\b(NAPRENDER|NAPTOKEN|AI)\s*([a-zA-Z0-9@._+-]+)/i);
+        // Bắt các từ khóa tiền tố: AI, NAPRENDER, NAPTOKEN
+        const match = content.match(/\b(AI|NAPRENDER|NAPTOKEN)\s+([a-zA-Z0-9\s]+)/i);
         if (!match) {
-            return res.status(200).json({ success: true, message: "Cú pháp không chứa tiền tố hợp lệ" });
+            return res.status(200).json({ success: true, message: "Không chứa cú pháp hợp lệ" });
         }
 
-        // Lọc bỏ mọi ký tự đặc biệt (@, ., _, -, +) SAU KHI bắt được, để so khớp thống nhất
-        // dù cú pháp là email thô ("dinhthanh@dt3dmodel.org") hay email đã làm sạch ("dinhthanhdt3dmodelorg") hay ID số ("11").
-        const refCode = match[2].trim().toLowerCase().replace(/[^a-zA-Z0-9]/g, "");
+        // Tách các từ đằng sau tiền tố. Ví dụ từ "AI 11 dinhthanhdt3dmodelorg" 
+        // => parts sẽ là ["11", "dinhthanhdt3dmodelorg"]
+        const payloadText = match[2].trim();
+        const parts = payloadText.split(/\s+/);
+        
+        const maybeId = parts[0]; // Số ID (Ví dụ: "11" hoặc "462")
+        const maybeEmail = parts[1] || parts[0]; // Email rút gọn
 
         const amount = parseFloat(transferAmount || rawAmount || 0);
         const creditsToAdd = calculateCredits(amount);
@@ -117,16 +121,17 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
             return res.status(500).json({ error: "Lỗi kết nối CSDL" });
         }
 
+        // ƯU TIÊN 1: Khớp theo Mã ID trước -> ƯU TIÊN 2: Khớp theo Email
         const targetUser = users.find(u => {
             if (!u) return false;
-            const isIdMatch = u.id && u.id.toString() === refCode;
+            const isIdMatch = u.id && u.id.toString() === maybeId;
             const userCleanEmail = u.email ? u.email.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
-            const isEmailMatch = userCleanEmail && userCleanEmail === refCode;
+            const isEmailMatch = userCleanEmail && (userCleanEmail === maybeEmail.toLowerCase() || userCleanEmail === maybeId.toLowerCase());
             return isIdMatch || isEmailMatch;
         });
 
         if (!targetUser) {
-            console.log(`❌ Không tìm thấy user khớp với mã ref: ${refCode}`);
+            console.log(`❌ Không tìm thấy user với thông tin: ID=${maybeId}, Email=${maybeEmail}`);
             return res.status(200).json({ success: false, message: "Không tìm thấy User" });
         }
 
@@ -150,10 +155,4 @@ app.post('/api/webhook/sepay-render', async (req, res) => {
         console.error("Lỗi xử lý Webhook SePay:", err);
         return res.status(500).json({ error: err.message });
     }
-});
-
-app.listen(PORT, () => {
-    console.log(`=============================================`);
-    console.log(`✅ [SERVER RENDER AI] Đang chạy tại cổng ${PORT}`);
-    console.log(`=============================================`);
 });

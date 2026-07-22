@@ -88,13 +88,15 @@ app.get('/api/render/user/balance', async (req, res) => {
     }
 });
 
-// 🎯 5. API TRỪ LƯỢT REAL-TIME TRÊN SUPABASE
+// 🎯 5. API TRỪ LƯỢT REAL-TIME TRÊN SUPABASE (Đã đồng bộ hoá với Giao Diện)
 app.post('/api/render/user/deduct', async (req, res) => {
   try {
-    const { email, amount } = req.body;
-    const parsedAmount = parseFloat(amount);
-    if (!email || !amount || isNaN(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({ error: 'Thiếu thông tin hoặc số Lượt không hợp lệ' });
+    // Sửa lại để nhận tham số "cost" thay vì "amount" để khớp với code HTML
+    const { email, cost, amount } = req.body;
+    const deductValue = parseFloat(cost || amount);
+
+    if (!email || isNaN(deductValue)) {
+        return res.status(400).json({ success: false, error: 'Thiếu email hoặc số lượt trừ' });
     }
 
     const { data: user, error: fetchErr } = await supabase
@@ -103,9 +105,9 @@ app.post('/api/render/user/deduct', async (req, res) => {
       .eq('email', email)
       .single();
 
-    if (fetchErr || !user) return res.status(404).json({ error: 'Không tìm thấy user' });
+    if (fetchErr || !user) return res.status(404).json({ success: false, error: 'Không tìm thấy user' });
 
-    const newCredits = Math.max(0, user.credits - parsedAmount);
+    const newCredits = Math.max(0, user.credits - deductValue);
 
     const { data: updatedUser, error: updateErr } = await supabase
       .from('users_tokens_render')
@@ -114,12 +116,14 @@ app.post('/api/render/user/deduct', async (req, res) => {
       .select()
       .single();
 
-    if (updateErr) return res.status(500).json({ error: updateErr.message });
+    if (updateErr) return res.status(500).json({ success: false, error: updateErr.message });
 
-    console.log(`✂️ [TRỪ LƯỢT] User: ${email} | Trừ: ${amount} | Còn lại: ${updatedUser.credits}`);
-    return res.json({ success: true, credits: updatedUser.credits });
+    console.log(`✂️ [TRỪ LƯỢT] User: ${email} | Trừ: ${deductValue} | Còn lại: ${updatedUser.credits}`);
+    
+    // Trả về từ khóa "newCredits" để giao diện đọc được và update UI
+    return res.json({ success: true, newCredits: updatedUser.credits });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

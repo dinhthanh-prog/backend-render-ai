@@ -6,9 +6,7 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e24; color: #e3e3e6; margin: 0; padding: 0; height: 100vh; overflow: hidden; }
         .app-container { display: flex; width: 100vw; height: 100vh; }
         
-        /* ========================================================= */
-        /* 🔒 MÀN HÌNH CHỜ ĐĂNG NHẬP BAN ĐẦU (FULL SCREEN OVERLAY)  */
-        /* ========================================================= */
+        /* MÀN HÌNH CHỜ ĐĂNG NHẬP BAN ĐẦU */
         .login-overlay-screen { 
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
             background: #121214; display: flex; flex-direction: column; 
@@ -64,7 +62,6 @@
         .user-email { font-size: 11px; font-weight: 600; color: #a0a0ab; width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .token-badge { background: #27ae60; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; width: max-content; }
         
-        /* NHÓM NÚT NẠP TIỀN & LOAD LẠI SỐ DƯ */
         .account-btn-group { display: flex; align-items: center; gap: 6px; }
         .btn-refresh-balance { 
             background: #2980b9; color: white; border: none; width: 30px; height: 30px; 
@@ -148,6 +145,8 @@
         .download-tier-group { position: absolute; bottom: 14px; left: 14px; display: flex; gap: 8px; z-index: 15; }
         .btn-tier-dl { background: rgba(30,30,30,0.85); color: white; border: 1px solid #3a3a42; padding: 10px 14px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; transition: 0.2s; text-transform: uppercase; backdrop-filter: blur(4px); }
         .btn-tier-dl:hover { background: #27ae60; border-color: #2ecc71; transform: translateY(-2px); }
+        .btn-tier-dl.disabled { background: rgba(40,40,45,0.6); color: #7a7a85; border-color: #2d2d35; cursor: not-allowed; }
+        .btn-tier-dl.disabled:hover { background: rgba(40,40,45,0.6); border-color: #2d2d35; transform: none; }
 
         .upscale-loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,15,15,0.92); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; z-index: 100; color: #fff; backdrop-filter: blur(8px); text-align: center; }
 
@@ -192,7 +191,7 @@
 </head>
 <body onload="initPlugin()">
 
-    <!-- 🔒 MÀN HÌNH CHỜ ĐĂNG NHẬP CHÍNH -->
+    <!-- MÀN HÌNH CHỜ ĐĂNG NHẬP CHÍNH -->
     <div class="login-overlay-screen" id="login-screen">
         <div class="login-card">
             <div class="login-main-title">RENDER AI</div>
@@ -209,7 +208,7 @@
         <div class="sidebar-scenes">
             <div class="sidebar-title-row">
                 <div class="sidebar-title">Danh sách View</div>
-                <button class="btn-refresh-scenes" onclick="reloadSceneList()" title="Tải lại danh sách View">🔄</button>
+                <button class="btn-refresh-scenes" onclick="reloadSceneList()" title="Tải lại & cập nhật thumbnail View">🔄</button>
             </div>
             <div class="scene-list" id="scene-list"></div>
             <div class="action-container">
@@ -287,7 +286,7 @@
                 <input type="range" id="fov-slider" min="10" max="120" value="35" style="width: 100%; accent-color: #2ecc71; cursor: pointer;" oninput="updateFOVFromUI(this.value)">
             </div>
 
-            <div class="section-title">🤖 Chọn mô hình AI Render</div>
+            <div class="section-title">🤖 Chọn mô hình AI Render (Leonardo Powered)</div>
             <select id="select-model">
                 <option value="nano-banana-2" data-cost="2" selected>Nano Banana 2 (Nhanh - Tiết kiệm) [Trừ 2 Lượt]</option>
                 <option value="gemini-image-2" data-cost="10">Nano Banana Pro (Xịn - Sắc nét) [Trừ 10 Lượt]</option>
@@ -353,10 +352,11 @@
                         <button class="btn-zoom" onclick="resetZoom()" title="Về mặc định">⟲</button>
                     </div>
 
+                    <!-- 🔒 Nút Nâng 4K đã khóa -->
                     <div class="download-tier-group">
                         <button class="btn-tier-dl" id="btn-download-current" onclick="downloadImageDirectly()">📥 Tải ảnh</button>
-                        <button class="btn-tier-dl" onclick="requestLeonardoUpscale(2)">⚡ Nâng 2K - 3 Lượt</button>
-                        <button class="btn-tier-dl" id="btn-4k-upscale" style="opacity: 0.5; cursor: not-allowed; background: #2a2a2e; color: #8a8a93; border-color: #3a3a42;" onclick="alert('Tính năng Nâng 4K sẽ được cập nhật sau!')">🚀 Nâng 4K - Cập nhật sau</button>
+                        <button class="btn-tier-dl" onclick="requestLeonardoUpscale(2)">⚡ Nâng 2K (AI) - 3 Lượt</button>
+                        <button class="btn-tier-dl disabled" onclick="requestLeonardoUpscale(4)" title="Tính năng tạm khóa">🔒 Nâng 4K (Đang khóa)</button>
                     </div>
 
                     <div class="upscale-loading-overlay" id="upscale-loading">
@@ -426,8 +426,9 @@
     </div>
 
     <script>
-        function initPlugin() { sketchup.request_sync_scenes(); loadHistoryFromCache(); }
+        function initPlugin() { sketchup.request_sync_scenes(false); loadHistoryFromCache(); }
 
+        // 🎯 Nút load thủ công cho khung "Danh sách View" — ép buộc chụp lại thumbnail chuẩn
         function reloadSceneList() {
             let btn = document.querySelector('.btn-refresh-scenes');
             if (btn) {
@@ -435,7 +436,7 @@
                 void btn.offsetWidth;
                 btn.classList.add('spinning');
             }
-            sketchup.request_sync_scenes();
+            sketchup.request_sync_scenes(true); // Gửi cờ true ép chụp lại toàn bộ scene
         }
 
         let currentSelectedRatio = "16:9";
@@ -470,39 +471,8 @@
         }
 
         function refreshBalance() {
-    let userEmail = document.getElementById('txt-user-email').innerText;
-    if (!userEmail || userEmail === "Đang tải...") return;
-
-    fetch(`https://backend-render-ai-ipuz.onrender.com/api/render/user/balance?email=${encodeURIComponent(userEmail)}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.credits !== undefined) {
-                userTokens = parseFloat(data.credits);
-                document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
-            }
-        })
-        .catch(err => console.log("Lỗi làm mới số dư:", err));
-}
-
-// 🎯 HÀM GỬI LỆNH TRỪ LƯỢT VỀ SERVER & ĐỒNG BỘ SUPABASE
-function deductServerCredits(cost) {
-    let userEmail = document.getElementById('txt-user-email').innerText;
-    if (!userEmail || userEmail === "Đang tải...") return;
-
-    fetch('https://backend-render-ai-ipuz.onrender.com/api/render/user/deduct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: userEmail, amount: cost })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.credits !== undefined) {
-            userTokens = parseFloat(data.credits);
-            document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
-        }
-    })
-    .catch(err => console.error("Lỗi trừ lượt Supabase:", err));
-}
+            let userEmail = document.getElementById('txt-user-email').innerText;
+            if (!userEmail || userEmail === "Đang tải...") return;
 
             fetch(`https://backend-render-ai-ipuz.onrender.com/api/render/user/balance?email=${encodeURIComponent(userEmail)}`)
                 .then(res => res.json())
@@ -571,102 +541,36 @@ function deductServerCredits(cost) {
         }
 
         function requestLeonardoUpscale(factor) {
+            requestMagnificUpscale(factor);
+        }
+
+        function requestMagnificUpscale(factor) {
+            // 🔒 Khóa nút Nâng 4K
             if (factor === 4) {
-                handleUpscale4K();
+                alert("Tính năng Nâng 4K hiện đang tạm khóa!");
                 return;
             }
+
             let cost = 3;
+            let resLabel = "2K";
+
             if (userTokens < cost) { alert("Tài khoản không đủ lượt!"); return; }
-            if (!currentGenerationImageId) {
-                alert("Ảnh này chưa có ID để nâng cấp. Vui lòng render lại rồi thử.");
+            if (!currentRenderedUrl) {
+                alert("Chưa có ảnh để nâng cấp. Vui lòng render trước.");
                 return;
             }
 
-            let resLabel = "2K";
-            document.getElementById('txt-upscale-msg').innerText = "🚀 Đang gửi ảnh lên máy chủ nâng cấp AI lên " + resLabel + "...";
-            document.getElementById('upscale-loading').style.display = "flex";
             document.getElementById('txt-upscale-msg').innerText = "🚀 Đang gửi ảnh lên Magnific để nâng cấp AI lên " + resLabel + "...";
-document.getElementById('upscale-loading').style.display = "flex";
+            document.getElementById('upscale-loading').style.display = "flex";
 
-deductServerCredits(cost); // 👈 Thêm dòng này vào đây
-
-            sketchup.request_leonardo_upscale(JSON.stringify({
-                image_id: currentGenerationImageId,
+            sketchup.request_magnific_upscale(JSON.stringify({
+                local_path: currentRenderedUrl,
                 width: currentGenerationWidth,
                 height: currentGenerationHeight,
                 factor: factor,
                 cost: cost,
                 res_label: resLabel
             }));
-        }
-
-        async function handleUpscale4K() {
-            let cost = 15;
-            if (userTokens < cost) {
-                alert("⚠️ Tài khoản của anh không đủ lượt! Nâng 4K yêu cầu " + cost + " Lượt. Vui lòng nạp thêm!");
-                openTopUpModal();
-                return;
-            }
-
-            if (!currentRenderedUrl) {
-                alert("⚠️ Vui lòng Render ra kết quả trước khi bấm Nâng 4K nhé!");
-                return;
-            }
-
-            let userEmail = document.getElementById('txt-user-email').innerText;
-            if (!userEmail || userEmail === "Đang tải...") {
-                alert("⚠️ Không xác định được tài khoản người dùng!");
-                return;
-            }
-
-            if (!confirm("Tính năng Nâng 4K siêu nét sẽ trừ 15 Lượt. Anh có muốn tiếp tục?")) {
-                return;
-            }
-
-            document.getElementById('txt-upscale-msg').innerText = "🚀 Đang xử lý làm nét 4K qua Magnific AI...";
-            document.getElementById('upscale-loading').style.display = "flex";
-
-            try {
-                const response = await fetch('https://backend-render-ai-ipuz.onrender.com/api/upscale-4k', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email: userEmail,
-                        imageUrl: currentRenderedUrl
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok || !data.success) {
-                    alert("❌ Lỗi: " + (data.error || "Không thể nâng cấp ảnh 4K!"));
-                    return;
-                }
-
-                if (data.remainingCredits !== undefined) {
-                    userTokens = parseFloat(data.remainingCredits);
-                    document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
-                }
-
-                if (data.upscaledUrl) {
-            currentRenderedUrl = data.upscaledUrl;
-            let srcRend = (data.upscaledUrl.startsWith('data:') || data.upscaledUrl.startsWith('http')) ? data.upscaledUrl : (data.upscaledUrl + "?t=" + new Date().getTime());
-            document.getElementById('img-rendered').src = srcRend;
-            document.getElementById('slider-after-tag').innerText = "RENDER | 4K";
-            document.getElementById('btn-download-current').innerText = "📥 Tải ảnh 4K";
-
-            // 🎯 THÊM CHÍNH XÁC DÒNG NÀY VÀO ĐÂY ANH NHÉ:
-            downloadImageDirectly();
-        }
-
-                alert("🎉 Nâng 4K thành công!");
-
-            } catch (err) {
-                console.error(err);
-                alert("❌ Lỗi kết nối Server khi Nâng 4K!");
-            } finally {
-                document.getElementById('upscale-loading').style.display = "none";
-            }
         }
 
         function updateSliderRatio(clientX) {
@@ -878,12 +782,8 @@ deductServerCredits(cost); // 👈 Thêm dòng này vào đây
                 card.className = 'scene-card' + (scene.name === activeSceneName ? ' active' : '');
                 card.setAttribute('data-name', scene.name);
                 card.onclick = () => selectScene(scene.name);
-
-                let imgSrc = (scene.thumb && scene.thumb.startsWith('data:')) 
-                    ? scene.thumb 
-                    : `${scene.thumb}?t=${new Date().getTime()}`;
-
-                card.innerHTML = `<img src="${imgSrc}" /><div class="scene-label">${scene.name}</div>`;
+                let timestamp = new Date().getTime();
+                card.innerHTML = `<img src="${scene.thumb}?t=${timestamp}" /><div class="scene-label">${scene.name}</div>`;
                 listContainer.appendChild(card);
             });
         }
@@ -918,9 +818,11 @@ deductServerCredits(cost); // 👈 Thêm dòng này vào đây
                 return;
             }
 
+            // Trừ tạm trên giao diện để phản hồi nhanh cho người dùng.
+            // Số Lượt THẬT sẽ được đồng bộ lại từ server (Supabase) khi renderFinished() chạy.
+            pendingRenderCost = cost;
             userTokens -= cost;
             document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
-            deductServerCredits(cost); // 👈 Thêm dòng này để trừ lượt trên Supabase
 
             document.getElementById('res-placeholder').style.display = 'none';
             document.getElementById('res-comparison').style.display = 'none';
@@ -946,7 +848,8 @@ deductServerCredits(cost); // 👈 Thêm dòng này vào đây
                 model: selectedModelId, 
                 ref_url: refUrl, 
                 ratio: currentSelectedRatio,
-                master_mood_base64: masterMoodBase64
+                master_mood_base64: masterMoodBase64,
+                cost: cost
             }));
         }
 
@@ -954,13 +857,13 @@ deductServerCredits(cost); // 👈 Thêm dòng này vào đây
         let currentGenerationImageId = "";
         let currentGenerationWidth = 0;
         let currentGenerationHeight = 0;
+        let pendingRenderCost = 0;
 
         function setRenderStatusText(text) {
             let el = document.getElementById('txt-render-status');
             if (el) { el.innerHTML = text; }
         }
 
-        // 🎯 ĐÃ SỬA: TỰ ĐỘNG BỎ ĐUÔI ?t= KHI NÓ LÀ CHUỖI BASE64
         function renderFinished(status, origImgPath, renderImgPath, genImageId, genWidth, genHeight, isUpscaled2K, upscaleErrMsg, newTokenCount) {
             document.getElementById('res-loading').style.display = 'none';
             if (status === "success") {
@@ -971,15 +874,10 @@ deductServerCredits(cost); // 👈 Thêm dòng này vào đây
                 activeViewerRatio = currentSelectedRatio;
                 resetZoom();
                 let t = new Date().getTime();
-
-                let srcOrig = (origImgPath && origImgPath.startsWith('data:')) ? origImgPath : (origImgPath + "?t=" + t);
-                let srcRend = (renderImgPath && (renderImgPath.startsWith('data:') || renderImgPath.startsWith('http'))) ? renderImgPath : (renderImgPath + "?t=" + t);
-
-                document.getElementById('img-original').src = srcOrig;
-                document.getElementById('img-rendered').src = srcRend;
+                document.getElementById('img-original').src = origImgPath + "?t=" + t;
+                document.getElementById('img-rendered').src = renderImgPath + "?t=" + t;
                 document.getElementById('slider-after-tag').innerText = isUpscaled2K ? "RENDER | 2K" : "RENDER";
                 document.getElementById('btn-download-current').innerText = isUpscaled2K ? "📥 Tải ảnh 2K" : "📥 Tải ảnh";
-                
                 if (typeof newTokenCount !== "undefined" && newTokenCount !== null && newTokenCount !== "") {
                     userTokens = parseFloat(newTokenCount);
                     document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
@@ -989,46 +887,17 @@ deductServerCredits(cost); // 👈 Thêm dòng này vào đây
                 addToHistory(origImgPath, renderImgPath, activeSceneName, currentSelectedRatio, currentGenerationImageId, currentGenerationWidth, currentGenerationHeight);
             } else {
                 document.getElementById('res-placeholder').style.display = 'flex';
+                // Render lỗi => server KHÔNG trừ Lượt thật, nên hoàn lại số đã trừ tạm trên UI.
+                userTokens += pendingRenderCost;
+                document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
                 alert("Lỗi hệ thống: " + renderImgPath);
             }
+            pendingRenderCost = 0;
         }
 
-        async function downloadImageDirectly() {
-    if (!currentRenderedUrl) {
-        alert("⚠️ Chưa có ảnh để tải!");
-        return;
-    }
-
-    try {
-        let fileUrl = currentRenderedUrl;
-
-        // Nếu là URL online (http/https), fetch thành Blob để trình duyệt tải về mượt mượt
-        if (fileUrl.startsWith('http')) {
-            const res = await fetch(fileUrl);
-            const blob = await res.blob();
-            fileUrl = URL.createObjectURL(blob);
+        function downloadImageDirectly() {
+            if(currentRenderedUrl) { sketchup.download_image_to_pc(currentRenderedUrl); }
         }
-
-        // Kích hoạt nút tải ẩn
-        const a = document.createElement('a');
-        a.href = fileUrl;
-        let tagText = document.getElementById('slider-after-tag')?.innerText || 'RENDER';
-        let prefix = tagText.includes('2K') ? 'Render_AI_2K_' : (tagText.includes('4K') ? 'Render_AI_4K_' : 'Render_AI_');
-        a.download = `${prefix}${new Date().getTime()}.jpg`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-        if (fileUrl.startsWith('blob:')) {
-            setTimeout(() => URL.revokeObjectURL(fileUrl), 2000);
-        }
-    } catch (e) {
-        console.error("Lỗi tải ảnh JS:", e);
-        if (typeof sketchup !== 'undefined' && sketchup.download_image_to_pc) {
-            sketchup.download_image_to_pc(currentRenderedUrl);
-        }
-    }
-}
 
         function upscaleFinished(newTokenCount, resLabel, newRenderUrl, newGenImageId, newWidth, newHeight) {
             document.getElementById('upscale-loading').style.display = "none";
@@ -1037,8 +906,8 @@ deductServerCredits(cost); // 👈 Thêm dòng này vào đây
             document.getElementById('slider-after-tag').innerText = "RENDER | " + resLabel;
             if (newRenderUrl) {
                 currentRenderedUrl = newRenderUrl;
-                let srcRend = (newRenderUrl.startsWith('data:') || newRenderUrl.startsWith('http')) ? newRenderUrl : (newRenderUrl + "?t=" + new Date().getTime());
-                document.getElementById('img-rendered').src = srcRend;
+                let t = new Date().getTime();
+                document.getElementById('img-rendered').src = newRenderUrl + "?t=" + t;
                 document.getElementById('btn-download-current').innerText = "📥 Tải ảnh " + resLabel;
             }
             if (newGenImageId) { currentGenerationImageId = newGenImageId; }
@@ -1077,12 +946,8 @@ deductServerCredits(cost); // 👈 Thêm dòng này vào đây
                     currentGenerationHeight = item.genHeight || 0;
                     resetZoom();
                     let t = new Date().getTime();
-
-                    let srcOrig = (item.origUrl && item.origUrl.startsWith('data:')) ? item.origUrl : (item.origUrl + "?t=" + t);
-                    let srcRend = (item.renderUrl && (item.renderUrl.startsWith('data:') || item.renderUrl.startsWith('http'))) ? item.renderUrl : (item.renderUrl + "?t=" + t);
-
-                    document.getElementById('img-original').src = srcOrig;
-                    document.getElementById('img-rendered').src = srcRend;
+                    document.getElementById('img-original').src = item.origUrl + "?t=" + t;
+                    document.getElementById('img-rendered').src = item.renderUrl + "?t=" + t;
                     document.getElementById('slider-after-tag').innerText = "RENDER";
                     document.getElementById('btn-download-current').innerText = "📥 Tải ảnh";
                     document.getElementById('res-comparison').style.display = 'flex';

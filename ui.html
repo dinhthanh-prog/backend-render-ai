@@ -976,7 +976,9 @@
         // Kích hoạt nút tải ẩn
         const a = document.createElement('a');
         a.href = fileUrl;
-        a.download = `Render_AI_4K_${new Date().getTime()}.jpg`;
+        let tagText = document.getElementById('slider-after-tag')?.innerText || 'RENDER';
+        let prefix = tagText.includes('2K') ? 'Render_AI_2K_' : (tagText.includes('4K') ? 'Render_AI_4K_' : 'Render_AI_');
+        a.download = `${prefix}${new Date().getTime()}.jpg`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

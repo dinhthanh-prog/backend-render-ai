@@ -1,3 +1,4 @@
+const path = require('path');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -7,6 +8,10 @@ const PayOS = require('@payos/node');
 const app = express();
 app.use(cors());
 app.use(express.json());
+// 🌐 TẢI GIAO DIỆN REMOTE CHO SKETCHUP
+app.get('/ui', (req, res) => {
+    res.sendFile(path.join(__dirname, 'ui.html'));
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -64,7 +69,10 @@ app.post('/api/render/auth/google', async (req, res) => {
         return res.status(500).json({ error: err.message });
     }
 });
-
+// 🌐 TẢI GIAO DIỆN REMOTE CHO SKETCHUP PLUGIN (AUTO UPDATE)
+app.get('/ui', (req, res) => {
+    res.sendFile(path.join(__dirname, 'ui.html'));
+});
 // 4. API KIỂM TRA SỐ DƯ
 app.get('/api/render/user/balance', async (req, res) => {
     try {

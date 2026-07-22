@@ -358,7 +358,7 @@
                     <div class="download-tier-group">
                         <button class="btn-tier-dl" id="btn-download-current" onclick="downloadImageDirectly()">📥 Tải ảnh</button>
                         <button class="btn-tier-dl" onclick="requestLeonardoUpscale(2)">⚡ Nâng 2K - 3 Lượt</button>
-                        <button class="btn-tier-dl" id="btn-4k-upscale" onclick="handleUpscale4K()">🚀 Nâng 4K - 100 Lượt</button>
+                        <button class="btn-tier-dl" id="btn-4k-upscale" onclick="handleUpscale4K()">🚀 Nâng 4K - 15 Lượt</button>
                     </div>
 
                     <div class="upscale-loading-overlay" id="upscale-loading">
@@ -541,31 +541,72 @@
             document.getElementById('img-rendered').src = "";
         }
 
-        function requestLeonardoUpscale(factor) {
-            if (factor === 4) {
-                handleUpscale4K();
-                return;
-            }
-            let cost = 3;
-            if (userTokens < cost) { alert("Tài khoản không đủ lượt!"); return; }
-            if (!currentGenerationImageId) {
-                alert("Ảnh này chưa có ID để nâng cấp. Vui lòng render lại rồi thử.");
-                return;
-            }
+        async function handleUpscale4K() {
+    let cost = 15; // 🎯 ĐỔI TỪ 100 THÀNH 15 LƯỢT
+    if (userTokens < cost) {
+        alert("⚠️ Tài khoản của anh không đủ lượt! Nâng 4K yêu cầu " + cost + " Lượt. Vui lòng nạp thêm!");
+        openTopUpModal();
+        return;
+    }
 
-            let resLabel = "2K";
-            document.getElementById('txt-upscale-msg').innerText = "🚀 Đang gửi ảnh lên máy chủ nâng cấp AI lên " + resLabel + "...";
-            document.getElementById('upscale-loading').style.display = "flex";
+    if (!currentRenderedUrl) {
+        alert("⚠️ Vui lòng Render ra kết quả trước khi bấm Nâng 4K nhé!");
+        return;
+    }
 
-            sketchup.request_leonardo_upscale(JSON.stringify({
-                image_id: currentGenerationImageId,
-                width: currentGenerationWidth,
-                height: currentGenerationHeight,
-                factor: factor,
-                cost: cost,
-                res_label: resLabel
-            }));
+    let userEmail = document.getElementById('txt-user-email').innerText;
+    if (!userEmail || userEmail === "Đang tải...") {
+        alert("⚠️ Không xác định được tài khoản người dùng!");
+        return;
+    }
+
+    // 🎯 ĐỔI CẢNH BÁO THÀNH 15 LƯỢT
+    if (!confirm("Tính năng Nâng 4K siêu nét sẽ trừ 15 Lượt. Anh có muốn tiếp tục?")) {
+        return;
+    }
+
+    document.getElementById('txt-upscale-msg').innerText = "🚀 Đang xử lý làm nét 4K qua Magnific AI...";
+    document.getElementById('upscale-loading').style.display = "flex";
+
+    try {
+        const response = await fetch('https://backend-render-ai-ipuz.onrender.com/api/upscale-4k', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail,
+                imageUrl: currentRenderedUrl
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            alert("❌ Lỗi: " + (data.error || "Không thể nâng cấp ảnh 4K!"));
+            return;
         }
+
+        if (data.remainingCredits !== undefined) {
+            userTokens = parseFloat(data.remainingCredits);
+            document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
+        }
+
+        if (data.upscaledUrl) {
+            currentRenderedUrl = data.upscaledUrl;
+            let t = new Date().getTime();
+            document.getElementById('img-rendered').src = data.upscaledUrl + "?t=" + t;
+            document.getElementById('slider-after-tag').innerText = "RENDER | 4K";
+            document.getElementById('btn-download-current').innerText = "📥 Tải ảnh 4K";
+        }
+
+        alert("🎉 Nâng 4K thành công!");
+
+    } catch (err) {
+        console.error(err);
+        alert("❌ Lỗi kết nối Server khi Nâng 4K!");
+    } finally {
+        document.getElementById('upscale-loading').style.display = "none";
+    }
+}
 
         // 3. HÀM GỌI API MAGNIFIC 4K LÊN BACKEND RENDER
         async function handleUpscale4K() {

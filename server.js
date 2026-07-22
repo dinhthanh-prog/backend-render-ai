@@ -206,7 +206,7 @@ app.post('/api/upscale-4k', async (req, res) => {
             return res.status(400).json({ error: "Thiếu thông tin Email hoặc URL ảnh cần nâng cấp!" });
         }
 
-        const COST_CREDITS = 100; // Số lượt trừ cho mỗi lần Nâng 4K
+        const COST_CREDITS = 15; // Số lượt trừ cho mỗi lần Nâng 4K
 
         // 1. Kiểm tra số dư lượt của User trong Supabase
         const { data: user, error: userErr } = await supabase

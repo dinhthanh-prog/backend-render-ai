@@ -385,3 +385,36 @@ app.post('/api/upscale-4k', async (req, res) => {
         return res.status(500).json({ error: "Lỗi hệ thống khi thực hiện Nâng 4K!" });
     }
 });
+// 🎯 API Trừ lượt real-time trên Supabase
+app.post('/api/render/user/deduct', async (req, res) => {
+  try {
+    const { email, amount } = req.body;
+    if (!email || !amount) return res.status(400).json({ error: 'Thiếu thông tin' });
+
+    // 1. Lấy số dư hiện tại từ Supabase
+    const { data: user, error: fetchErr } = await supabase
+      .from('users_tokens_render')
+      .select('credits')
+      .eq('email', email)
+      .single();
+
+    if (fetchErr || !user) return res.status(404).json({ error: 'Không tìm thấy user' });
+
+    // 2. Tính số dư mới (không âm)
+    const newCredits = Math.max(0, user.credits - parseFloat(amount));
+
+    // 3. Cập nhật lại vào Supabase
+    const { data: updatedUser, error: updateErr } = await supabase
+      .from('users_tokens_render')
+      .update({ credits: newCredits })
+      .eq('email', email)
+      .select()
+      .single();
+
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    return res.json({ success: true, credits: updatedUser.credits });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});

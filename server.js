@@ -92,7 +92,10 @@ app.get('/api/render/user/balance', async (req, res) => {
 app.post('/api/render/user/deduct', async (req, res) => {
   try {
     const { email, amount } = req.body;
-    if (!email || !amount) return res.status(400).json({ error: 'Thiếu thông tin' });
+    const parsedAmount = parseFloat(amount);
+    if (!email || !amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: 'Thiếu thông tin hoặc số Lượt không hợp lệ' });
+    }
 
     const { data: user, error: fetchErr } = await supabase
       .from('users_tokens_render')
@@ -102,7 +105,7 @@ app.post('/api/render/user/deduct', async (req, res) => {
 
     if (fetchErr || !user) return res.status(404).json({ error: 'Không tìm thấy user' });
 
-    const newCredits = Math.max(0, user.credits - parseFloat(amount));
+    const newCredits = Math.max(0, user.credits - parsedAmount);
 
     const { data: updatedUser, error: updateErr } = await supabase
       .from('users_tokens_render')

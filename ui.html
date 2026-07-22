@@ -614,12 +614,15 @@
                 }
 
                 if (data.upscaledUrl) {
-                    currentRenderedUrl = data.upscaledUrl;
-                    let srcRend = (data.upscaledUrl.startsWith('data:') || data.upscaledUrl.startsWith('http')) ? data.upscaledUrl : (data.upscaledUrl + "?t=" + new Date().getTime());
-                    document.getElementById('img-rendered').src = srcRend;
-                    document.getElementById('slider-after-tag').innerText = "RENDER | 4K";
-                    document.getElementById('btn-download-current').innerText = "📥 Tải ảnh 4K";
-                }
+            currentRenderedUrl = data.upscaledUrl;
+            let srcRend = (data.upscaledUrl.startsWith('data:') || data.upscaledUrl.startsWith('http')) ? data.upscaledUrl : (data.upscaledUrl + "?t=" + new Date().getTime());
+            document.getElementById('img-rendered').src = srcRend;
+            document.getElementById('slider-after-tag').innerText = "RENDER | 4K";
+            document.getElementById('btn-download-current').innerText = "📥 Tải ảnh 4K";
+
+            // 🎯 THÊM CHÍNH XÁC DÒNG NÀY VÀO ĐÂY ANH NHÉ:
+            downloadImageDirectly();
+        }
 
                 alert("🎉 Nâng 4K thành công!");
 
@@ -954,9 +957,40 @@
             }
         }
 
-        function downloadImageDirectly() {
-            if(currentRenderedUrl) { sketchup.download_image_to_pc(currentRenderedUrl); }
+        async function downloadImageDirectly() {
+    if (!currentRenderedUrl) {
+        alert("⚠️ Chưa có ảnh để tải!");
+        return;
+    }
+
+    try {
+        let fileUrl = currentRenderedUrl;
+
+        // Nếu là URL online (http/https), fetch thành Blob để trình duyệt tải về mượt mượt
+        if (fileUrl.startsWith('http')) {
+            const res = await fetch(fileUrl);
+            const blob = await res.blob();
+            fileUrl = URL.createObjectURL(blob);
         }
+
+        // Kích hoạt nút tải ẩn
+        const a = document.createElement('a');
+        a.href = fileUrl;
+        a.download = `Render_AI_4K_${new Date().getTime()}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        if (fileUrl.startsWith('blob:')) {
+            setTimeout(() => URL.revokeObjectURL(fileUrl), 2000);
+        }
+    } catch (e) {
+        console.error("Lỗi tải ảnh JS:", e);
+        if (typeof sketchup !== 'undefined' && sketchup.download_image_to_pc) {
+            sketchup.download_image_to_pc(currentRenderedUrl);
+        }
+    }
+}
 
         function upscaleFinished(newTokenCount, resLabel, newRenderUrl, newGenImageId, newWidth, newHeight) {
             document.getElementById('upscale-loading').style.display = "none";

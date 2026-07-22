@@ -6,8 +6,10 @@ const { createClient } = require('@supabase/supabase-js');
 const PayOS = require('@payos/node');
 
 const app = express();
+// ✅ MỚI: Mở rộng giới hạn cho phép gửi ảnh Base64 nặng đến 50MB
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // 🌐 TẢI GIAO DIỆN REMOTE CHO SKETCHUP
 app.get('/ui', (req, res) => {
     res.sendFile(path.join(__dirname, 'ui.html'));
@@ -189,7 +191,113 @@ app.post('/api/webhook/payos', async (req, res) => {
         return res.json({ success: true });
     }
 });
+// ======================================================
+// 🚀 API PHÓNG CẤP ẢNH 4K BẰNG MAGNIFIC AI
+// ======================================================
+app.post('/api/upscale-4k', async (req, res) => {
+    try {
+        const { email, imageUrl } = req.body;
 
+        if (!email || !imageUrl) {
+            return res.status(400).json({ error: "Thiếu thông tin Email hoặc Ảnh cần nâng cấp!" });
+        }
+
+        const COST_CREDITS = 15; // Phí 15 lượt
+
+        // 1. Kiểm tra số dư lượt của User trong Supabase
+        const { data: user, error: userErr } = await supabase
+            .from('users_tokens_render')
+            .select('credits')
+            .eq('email', email)
+            .single();
+
+        if (userErr || !user) {
+            return res.status(404).json({ error: "Không tìm thấy tài khoản người dùng!" });
+        }
+
+        if (user.credits < COST_CREDITS) {
+            return res.status(400).json({ 
+                error: `Tài khoản không đủ lượt! Cần ${COST_CREDITS} lượt (Số dư: ${user.credits})` 
+            });
+        }
+
+        const apiKey = process.env.MAGNIFIC_API_KEY || "MS4da1ac36ceac4058b2d8e384e770977e";
+
+        // Làm sạch chuỗi Base64 nếu có prefix
+        let cleanBase64 = imageUrl;
+        if (cleanBase64.includes('base64,')) {
+            cleanBase64 = cleanBase64.split('base64,')[1];
+        }
+
+        // 2. Gọi API Magnific Precision V2
+        const magnificRes = await fetch("https://api.magnific.com/v1/ai/image-upscaler-precision-v2", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-magnific-api-key": apiKey
+            },
+            body: JSON.stringify({
+                image: cleanBase64,
+                scale_factor: 4,
+                flavor: "photo"
+            })
+        });
+
+        const magData = await magnificRes.json();
+
+        if (!magnificRes.ok) {
+            console.error("❌ Lỗi Magnific API:", magData);
+            return res.status(500).json({ error: magData.message || "Lỗi xử lý Magnific AI" });
+        }
+
+        const taskId = magData.data?.task_id;
+        if (!taskId) {
+            return res.status(500).json({ error: "Không nhận được Task ID từ Magnific!" });
+        }
+
+        // 3. Vòng lặp chờ Magnific xử lý xong (Polling task_id)
+        let upscaledUrl = null;
+        for (let i = 0; i < 30; i++) {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Chờ 2s mỗi lần kiểm tra
+
+            const pollRes = await fetch(`https://api.magnific.com/v1/ai/image-upscaler-precision-v2/${taskId}`, {
+                headers: { "x-magnific-api-key": apiKey }
+            });
+            const pollData = await pollRes.json();
+
+            if (pollData.data?.status === "COMPLETED") {
+                upscaledUrl = pollData.data?.generated?.[0];
+                break;
+            } else if (pollData.data?.status === "FAILED" || pollData.data?.status === "ERROR") {
+                return res.status(500).json({ error: "Tiến trình nâng cấp 4K trên Magnific thất bại!" });
+            }
+        }
+
+        if (!upscaledUrl) {
+            return res.status(500).json({ error: "Quá thời gian xử lý 4K (Timeout)!" });
+        }
+
+        // 4. Trừ 15 lượt của User trong cơ sở dữ liệu Supabase
+        const newCredits = user.credits - COST_CREDITS;
+        await supabase
+            .from('users_tokens_render')
+            .update({ credits: newCredits })
+            .eq('email', email);
+
+        console.log(`✅ [NÂNG 4K THÀNH CÔNG] User: ${email} | Trừ 15 lượt | Số dư còn: ${newCredits}`);
+
+        // 5. Trả kết quả về cho Plugin
+        return res.json({
+            success: true,
+            upscaledUrl: upscaledUrl,
+            remainingCredits: newCredits
+        });
+
+    } catch (err) {
+        console.error("❌ Lỗi Server /api/upscale-4k:", err);
+        return res.status(500).json({ error: "Lỗi Server: " + err.message });
+    }
+});
 app.listen(PORT, () => {
     console.log(`=============================================`);
     console.log(`✅ [SERVER RENDER AI - PAYOS] Đang chạy tại cổng ${PORT}`);

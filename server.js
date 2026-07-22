@@ -195,3 +195,85 @@ app.listen(PORT, () => {
     console.log(`✅ [SERVER RENDER AI - PAYOS] Đang chạy tại cổng ${PORT}`);
     console.log(`=============================================`);
 });
+// ======================================================
+// 🚀 6. API PHÓNG CẤP ẢNH 4K / 8K BẰNG MAGNIFIC AI (FREPIK)
+// ======================================================
+app.post('/api/upscale-4k', async (req, res) => {
+    try {
+        const { email, imageUrl } = req.body;
+
+        if (!email || !imageUrl) {
+            return res.status(400).json({ error: "Thiếu thông tin Email hoặc URL ảnh cần nâng cấp!" });
+        }
+
+        const COST_CREDITS = 100; // Số lượt trừ cho mỗi lần Nâng 4K
+
+        // 1. Kiểm tra số dư lượt của User trong Supabase
+        const { data: user, error: userErr } = await supabase
+            .from('users_tokens_render')
+            .select('credits')
+            .eq('email', email)
+            .single();
+
+        if (userErr || !user) {
+            return res.status(404).json({ error: "Không tìm thấy tài khoản người dùng!" });
+        }
+
+        if (user.credits < COST_CREDITS) {
+            return res.status(400).json({ 
+                error: `Bạn cần tối thiểu ${COST_CREDITS} lượt để dùng tính năng Nâng 4K bằng Magnific AI! (Số dư hiện tại: ${user.credits})` 
+            });
+        }
+
+        // 2. Lấy API Key Magnific / Freepik
+        const apiKey = process.env.MAGNIFIC_API_KEY;
+        if (!apiKey) {
+            return res.status(500).json({ error: "Server chưa cấu hình MAGNIFIC_API_KEY trong file .env!" });
+        }
+
+        // 3. Gọi API Magnific / Freepik Upscaler
+        const response = await fetch("https://api.freepik.com/v1/ai/image-upscaler", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "x-freepik-api-key": apiKey
+            },
+            body: JSON.stringify({
+                image: { image_url: imageUrl },
+                scale_factor: 4,
+                optimized_for: "architecture"
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error("❌ Lỗi Magnific API:", data);
+            return res.status(500).json({ error: data.message || "Lỗi xử lý phóng ảnh từ Magnific AI!" });
+        }
+
+        // Lấy URL ảnh 4K trả về từ Magnific
+        const upscaledUrl = data.data?.[0]?.url || data.url || data.image;
+
+        // 4. Trừ 100 lượt của User trong cơ sở dữ liệu
+        const newCredits = user.credits - COST_CREDITS;
+        await supabase
+            .from('users_tokens_render')
+            .update({ credits: newCredits })
+            .eq('email', email);
+
+        console.log(`✅ [NÂNG 4K SUCCESS] User: ${email} | Trừ 100 lượt | Còn lại: ${newCredits}`);
+
+        // 5. Trả kết quả ảnh 4K về cho Plugin
+        return res.json({
+            success: true,
+            upscaledUrl: upscaledUrl,
+            remainingCredits: newCredits
+        });
+
+    } catch (err) {
+        console.error("❌ Lỗi Server /api/upscale-4k:", err);
+        return res.status(500).json({ error: "Lỗi hệ thống khi thực hiện Nâng 4K!" });
+    }
+});

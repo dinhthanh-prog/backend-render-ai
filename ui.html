@@ -470,8 +470,39 @@
         }
 
         function refreshBalance() {
-            let userEmail = document.getElementById('txt-user-email').innerText;
-            if (!userEmail || userEmail === "Đang tải...") return;
+    let userEmail = document.getElementById('txt-user-email').innerText;
+    if (!userEmail || userEmail === "Đang tải...") return;
+
+    fetch(`https://backend-render-ai-ipuz.onrender.com/api/render/user/balance?email=${encodeURIComponent(userEmail)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.credits !== undefined) {
+                userTokens = parseFloat(data.credits);
+                document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
+            }
+        })
+        .catch(err => console.log("Lỗi làm mới số dư:", err));
+}
+
+// 🎯 HÀM GỬI LỆNH TRỪ LƯỢT VỀ SERVER & ĐỒNG BỘ SUPABASE
+function deductServerCredits(cost) {
+    let userEmail = document.getElementById('txt-user-email').innerText;
+    if (!userEmail || userEmail === "Đang tải...") return;
+
+    fetch('https://backend-render-ai-ipuz.onrender.com/api/render/user/deduct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail, amount: cost })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.credits !== undefined) {
+            userTokens = parseFloat(data.credits);
+            document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
+        }
+    })
+    .catch(err => console.error("Lỗi trừ lượt Supabase:", err));
+}
 
             fetch(`https://backend-render-ai-ipuz.onrender.com/api/render/user/balance?email=${encodeURIComponent(userEmail)}`)
                 .then(res => res.json())
@@ -554,6 +585,10 @@
             let resLabel = "2K";
             document.getElementById('txt-upscale-msg').innerText = "🚀 Đang gửi ảnh lên máy chủ nâng cấp AI lên " + resLabel + "...";
             document.getElementById('upscale-loading').style.display = "flex";
+            document.getElementById('txt-upscale-msg').innerText = "🚀 Đang gửi ảnh lên Magnific để nâng cấp AI lên " + resLabel + "...";
+document.getElementById('upscale-loading').style.display = "flex";
+
+deductServerCredits(cost); // 👈 Thêm dòng này vào đây
 
             sketchup.request_leonardo_upscale(JSON.stringify({
                 image_id: currentGenerationImageId,
@@ -885,6 +920,7 @@
 
             userTokens -= cost;
             document.getElementById('txt-user-tokens').innerText = "🪙 " + formatTokens(userTokens) + " Lượt";
+            deductServerCredits(cost); // 👈 Thêm dòng này để trừ lượt trên Supabase
 
             document.getElementById('res-placeholder').style.display = 'none';
             document.getElementById('res-comparison').style.display = 'none';
